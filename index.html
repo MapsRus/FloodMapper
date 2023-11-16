@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Make the application on mobile take up the full browser screen and disable user scaling. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"
+    />
+    <title>Your City is Flooding</title>
+    <link rel="stylesheet" href="./lib/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="./lib/fontawesome/css/fontawesome.min.css" />
+    <script src="./lib/Cesium-1.109/Build/Cesium/Cesium.js"></script>
+    <link
+      rel="stylesheet"
+      href="./lib/Cesium-1.109/Build/Cesium/Widgets/widgets.css"
+    />
+    <link href="./lib/Tailwind/all.min.css" rel="stylesheet" />
+    <link href="./lib/Tailwind/css2.css" rel="stylesheet" />
+    <link href="./lib/Tailwind/index.min.css" rel="stylesheet" />
+    <link href="./lib/Tailwind/tailwind.css" rel="stylesheet" />
+    <script src="./lib/Tailwind/tailwind.js"></script>
+    <script src="./lib/Tailwind/index.min.js"></script>
+    <script src="./lib/JQuery-1.9.1/jquery-1.9.1-min.js"></script>
+    <script type="text/javascript" src="./scripts/init.js"></script>
+    <script type="text/javascript" src="./scripts/global.js"></script>
+    <script type="text/javascript" src="./scripts/initializer.js"></script>
+    <script type="text/javascript" src="./scripts/viewer.js"></script>
+    <script>
+      document.ondblclick = function (evt) {
+        if (window.getSelection) window.getSelection().removeAllRanges();
+        else if (document.selection) document.selection.empty();
+      };
+    </script>
+  </head>
+  <body>
+    <div
+      id="cesiumContainer"
+      class="w-full h-screen absolute z-50 top-0 left-0 overflow-hidden"
+    >
+      <div
+        id="LayerContainer"
+        class="w-[180px] absolute z-[9999] top-[10px] left-[10px] rounded border-2 border-gray-400"
+      ></div>
+    </div>
+  </body>
+</html>
