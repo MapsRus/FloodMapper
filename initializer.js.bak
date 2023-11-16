@@ -1,0 +1,529 @@
+$(function () {
+  // Grant CesiumJS access to your ion assets
+  Cesium.Ion.defaultAccessToken =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI1NTcyZmM1NC0xYmY5LTRjNDItOTEzOC02Y2JhZWM0ZTBkYWYiLCJpZCI6Mjg0NDcsImlhdCI6MTY2MjY1Nzk3OH0.Y6m0O4tydEtbtU-yuRH2k3uzmcgmG1tedODwmR3MZvE";
+
+  worldTerrain = Cesium.createWorldTerrain({
+    requestWaterMask: true,
+    requestVertexNormals: true,
+  });
+  viewer = new Cesium.Viewer("cesiumContainer", {
+    selectionIndicator: false,
+    fullscreenButton: false,
+    imageryProvider: false,
+    homeButton: false,
+    geocoder: false,
+    navigationHelpButton: false,
+    selectionIndicator: false,
+    sceneModePicker: false,
+    infoBox: false,
+    timeline: false,
+    animation: false,
+    terrainProvider: worldTerrain,
+  });
+  //viewer.baseLayerPicker.container.style.visibility = "hidden";
+  document.getElementsByClassName("cesium-viewer-bottom")[0].remove();
+  viewer.scene.globe.depthTestAgainstTerrain = true;
+  viewer.scene.highDynamicRange = false;
+  viewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(
+    Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK
+  );
+  viewer.camera.setView({
+    destination: new Cesium.Cartesian3(
+      -1644010.7771477904,
+      -3671273.2529115817,
+      4934591.318928915
+    ),
+    orientation: {
+      heading: 6.283185307178533, // east, default value is 0.0 (north)
+      pitch: -0.5000084893191361, // default value (looking down)
+      roll: 6.283185307179586, // default value
+    },
+  });
+  // To see the ground
+  layers = viewer.scene.imageryLayers;
+  camera = viewer.camera;
+  scene = viewer.scene;
+  globe = scene.globe;
+  ellipsoid = viewer.scene.globe.ellipsoid;
+  geodesic = new Cesium.EllipsoidGeodesic();
+  points = scene.primitives.add(new Cesium.PointPrimitiveCollection());
+  tempPoints = scene.primitives.add(new Cesium.PointPrimitiveCollection());
+  polylines = scene.primitives.add(new Cesium.PolylineCollection());
+  temppolylines = scene.primitives.add(new Cesium.PolylineCollection());
+  LINEPOINTCOLOR = Cesium.Color.YELLOW;
+
+  label = {
+    font: "14px monospace",
+    showBackground: true,
+    horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    pixelOffset: new Cesium.Cartesian2(2, 0),
+  };
+
+  HrMeasureEntity = viewer.entities.add({
+    name: "hrmeasurementlbl",
+    label: {
+      show: false,
+      showBackground: true,
+      font: "14px monospace",
+      horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      pixelOffset: new Cesium.Cartesian2(-10, -7),
+    },
+  });
+  VrMeasureEntity = viewer.entities.add({
+    name: "vrmeasurementlbl",
+    label: {
+      show: false,
+      showBackground: true,
+      font: "14px monospace",
+      horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      pixelOffset: new Cesium.Cartesian2(-10, -7),
+    },
+  });
+  PolylineMeasureEntity = viewer.entities.add({
+    name: "polylinemeasurementlbl",
+    label: {
+      show: false,
+      showBackground: true,
+      font: "14px monospace",
+      horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      pixelOffset: new Cesium.Cartesian2(-50, -7),
+    },
+  });
+  AreaMeasureEntity = viewer.entities.add({
+    name: "areameasurementlbl",
+    label: {
+      show: false,
+      showBackground: true,
+      font: "14px monospace",
+      horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      pixelOffset: new Cesium.Cartesian2(-10, -7),
+    },
+  });
+  infoEntity = viewer.entities.add({
+    name: "info_entity",
+    label: {
+      show: false,
+      showBackground: true,
+      font: "14px monospace",
+      backgroundColor: Cesium.Color.WHITE.withAlpha(0.8),
+      fillColor: Cesium.Color.BLACK,
+      horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      pixelOffset: new Cesium.Cartesian2(2, 0),
+    },
+  });
+
+  //For Line and polygon Drawing
+  activeShapePoints = [];
+  activeShape = {};
+  floatingPoint = undefined;
+
+  handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+  handler.setInputAction(function (event) {
+    if (Cesium.defined(floatingPoint)) {
+      var newPosition = viewer.scene.pickPosition(event.endPosition);
+      if (Cesium.defined(newPosition)) {
+        floatingPoint.position.setValue(newPosition);
+        activeShapePoints.pop();
+        activeShapePoints.push(newPosition);
+      }
+      if (MeasurementMode == "slope" && slopStartPoint !== null) {
+        if (pointCount == 2) {
+          pointCount = 0;
+          RemoveEntitiesByType(slopePoint);
+          slopStartPoint = null;
+        } else {
+          RemoveSlopeEntities();
+          if (
+            slopStartPoint.position !== undefined &&
+            newPosition !== undefined
+          ) {
+            updateSlopeMeasurement(slopStartPoint.position._value, newPosition);
+          }
+        }
+      }
+      if (
+        MeasurementMode == "hrLine" &&
+        activeShapePoints.length !== 0 &&
+        newPosition !== undefined
+      ) {
+        var point1 = ellipsoid.cartesianToCartographic(activeShapePoints[0]);
+        var point2 = ellipsoid.cartesianToCartographic(newPosition);
+        var distance = GetHorizontalDistance(point1, point2);
+        HrMeasureEntity.position = activeShapePoints[1];
+        HrMeasureEntity.label.show = true;
+        HrMeasureEntity.label.text = distance;
+      }
+      if (
+        MeasurementMode == "vrLine" &&
+        activeShapePoints.length !== 0 &&
+        newPosition !== undefined
+      ) {
+        var point1 = ellipsoid.cartesianToCartographic(activeShapePoints[0]);
+        var point2 = ellipsoid.cartesianToCartographic(newPosition);
+        var distance = GetVerticalDistance(point1, point2);
+        VrMeasureEntity.position = activeShapePoints[1];
+        VrMeasureEntity.label.show = true;
+        VrMeasureEntity.label.text = distance;
+      }
+      if (
+        MeasurementMode == "polyline" &&
+        activeShapePoints.length !== 0 &&
+        newPosition !== undefined
+      ) {
+        var point1 = ellipsoid.cartesianToCartographic(
+          activeShapePoints[activeShapePoints.length - 2]
+        );
+        var point2 = ellipsoid.cartesianToCartographic(newPosition);
+        var distance = GetHorizontalDistance(point1, point2);
+        PolylineMeasureEntity.position =
+          activeShapePoints[activeShapePoints.length - 1];
+        PolylineMeasureEntity.label.show = true;
+        PolylineMeasureEntity.label.text = distance;
+      }
+    }
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+  handler.setInputAction(function (event) {
+    var earthPosition = viewer.scene.pickPosition(event.position);
+    if (MeasurementMode == "alt") {
+      if (altentities.length !== 0) {
+        RemoveEntitiesByType(altentities);
+        altentities = [];
+      }
+      var cartographic = Cesium.Cartographic.fromCartesian(earthPosition);
+      var longitudeString = Cesium.Math.toDegrees(
+        cartographic.longitude
+      ).toFixed(8);
+      var latitudeString = Cesium.Math.toDegrees(cartographic.latitude).toFixed(
+        8
+      );
+      var heightString = cartographic.height.toFixed(3);
+
+      var shape = viewer.entities.add({
+        name: "markerPin",
+        position: Cesium.Cartesian3.fromDegrees(
+          parseFloat(longitudeString),
+          parseFloat(latitudeString),
+          parseFloat(heightString)
+        ),
+        label: {
+          show: true,
+          showBackground: true,
+          font: "14px monospace",
+          horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          pixelOffset: new Cesium.Cartesian2(2, 0),
+          text: "Altitude: " + Number(heightString) + " m",
+        },
+      });
+
+      altentities.push(shape);
+    } else if (MeasurementMode == "hrLine") {
+      if (distanceClickCount == 0 || distanceClickCount > 2) {
+        RemoveEntitiesByType(hrdistancelines);
+        hrdistancelines = [];
+        distanceClickCount = 0;
+      }
+      distanceClickCount++;
+      if (Cesium.defined(earthPosition)) {
+        if (activeShapePoints.length === 0) {
+          floatingPoint = createPoint(earthPosition);
+          activeShapePoints.push(earthPosition);
+          var dynamicPositions = new Cesium.CallbackProperty(function () {
+            return activeShapePoints;
+          }, false);
+          activeShape = drawShape(dynamicPositions);
+        }
+        activeShapePoints.push(earthPosition);
+        createPoint(earthPosition);
+        if (distanceClickCount == 2) {
+          terminateShape();
+          distanceClickCount = 0;
+        }
+      }
+    } else if (MeasurementMode == "vrLine") {
+      if (distanceClickCount == 0 || distanceClickCount > 2) {
+        RemoveEntitiesByType(vrdistancelines);
+        vrdistancelines = [];
+        distanceClickCount = 0;
+      }
+      distanceClickCount++;
+      if (Cesium.defined(earthPosition)) {
+        if (activeShapePoints.length === 0) {
+          floatingPoint = createPoint(earthPosition);
+          activeShapePoints.push(earthPosition);
+          var dynamicPositions = new Cesium.CallbackProperty(function () {
+            return activeShapePoints;
+          }, false);
+          activeShape = drawShape(dynamicPositions);
+        }
+        activeShapePoints.push(earthPosition);
+        createPoint(earthPosition);
+        if (distanceClickCount == 2) {
+          terminateShape();
+          distanceClickCount = 0;
+        }
+      }
+    } else if (MeasurementMode == "polyline") {
+      if (polylineClickCount == 0) {
+        RemoveEntitiesByType(polylinedistancelines);
+        RemoveEntitiesByType(polylineEntity);
+        polylinedistancelines = [];
+        polylineDistance = 0;
+      }
+      polylineClickCount++;
+      if (Cesium.defined(earthPosition)) {
+        if (activeShapePoints.length === 0) {
+          floatingPoint = createPoint(earthPosition);
+          activeShapePoints.push(earthPosition);
+          var dynamicPositions = new Cesium.CallbackProperty(function () {
+            return activeShapePoints;
+          }, false);
+          activeShape = drawShape(dynamicPositions);
+        }
+        activeShapePoints.push(earthPosition);
+        createPoint(earthPosition);
+        if (polylineClickCount > 1) {
+          ellipsoid = viewer.scene.globe.ellipsoid;
+          var point1 = ellipsoid.cartesianToCartographic(
+            activeShapePoints[activeShapePoints.length - 3]
+          );
+          var point2 = ellipsoid.cartesianToCartographic(
+            activeShapePoints[activeShapePoints.length - 2]
+          );
+          var distance = GetHorizontalDistance(point1, point2);
+          polylineDistance += parseFloat(distance.replace("m", ""));
+          var midPoint = GetCenterOfPoints(
+            activeShapePoints[activeShapePoints.length - 3],
+            activeShapePoints[activeShapePoints.length - 2]
+          );
+          var entity = viewer.entities.add({
+            name: "polyline",
+            position: midPoint,
+            label: {
+              show: true,
+              text: distance,
+              showBackground: true,
+              font: "14px monospace",
+              horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              pixelOffset: new Cesium.Cartesian2(-10, -7),
+            },
+          });
+          polylineEntity.push(entity);
+        }
+      }
+    } else if (MeasurementMode == "area") {
+      if (areaClickCount == 0) {
+        RemoveEntitiesByType(areaPolygon);
+        areaPolygon = [];
+        areastartingPoint = GetlonlatheightfromCartesian(earthPosition);
+      }
+      areaClickCount++;
+      // `earthPosition` will be undefined if our mouse is not over the globe.
+      if (Cesium.defined(earthPosition)) {
+        if (activeShapePoints.length === 0) {
+          floatingPoint = createPoint(earthPosition);
+          activeShapePoints.push(earthPosition);
+          var dynamicPositions = new Cesium.CallbackProperty(function () {
+            return new Cesium.PolygonHierarchy(
+              GetPositionWithExtraHeight(activeShapePoints)
+            );
+          }, false);
+          activeShape = drawShape(dynamicPositions);
+        }
+        activeShapePoints.push(earthPosition);
+        createPoint(earthPosition);
+      }
+    } else if (MeasurementMode == "slope") {
+      if (pointCount === 0) {
+        RemoveSlopeEntities();
+      }
+      pointCount++;
+      if (scene.mode !== Cesium.SceneMode.MORPHING) {
+        var cartesian = viewer.scene.pickPosition(event.position);
+        floatingPoint = createPoint(earthPosition);
+        if (Cesium.defined(cartesian)) {
+          if (points.length === 2) {
+            RemoveSlopeEntities();
+          }
+          //add first point
+          if (points.length === 0) {
+            slopStartPoint = createPoint(earthPosition);
+            point1 = points.add({
+              position: new Cesium.Cartesian3(
+                cartesian.x,
+                cartesian.y,
+                cartesian.z
+              ),
+              color: LINEPOINTCOLOR,
+            });
+          } //add second point and lines
+          else if (points.length === 1) {
+            RemoveSlopeEntities();
+            point2 = points.add({
+              position: new Cesium.Cartesian3(
+                cartesian.x,
+                cartesian.y,
+                cartesian.z
+              ),
+              color: LINEPOINTCOLOR,
+            });
+            point1GeoPosition = Cesium.Cartographic.fromCartesian(
+              point1.position
+            );
+            point2GeoPosition = Cesium.Cartographic.fromCartesian(
+              point2.position
+            );
+            point3GeoPosition = Cesium.Cartographic.fromCartesian(
+              new Cesium.Cartesian3(
+                point2.position.x,
+                point2.position.y,
+                point1.position.z
+              )
+            );
+
+            var pl1Positions = [
+              new Cesium.Cartesian3.fromRadians(
+                point1GeoPosition.longitude,
+                point1GeoPosition.latitude,
+                point1GeoPosition.height
+              ),
+              new Cesium.Cartesian3.fromRadians(
+                point2GeoPosition.longitude,
+                point2GeoPosition.latitude,
+                point2GeoPosition.height
+              ),
+            ];
+            var pl2Positions = [
+              new Cesium.Cartesian3.fromRadians(
+                point2GeoPosition.longitude,
+                point2GeoPosition.latitude,
+                point2GeoPosition.height
+              ),
+              new Cesium.Cartesian3.fromRadians(
+                point2GeoPosition.longitude,
+                point2GeoPosition.latitude,
+                point1GeoPosition.height
+              ),
+            ];
+            var pl3Positions = [
+              new Cesium.Cartesian3.fromRadians(
+                point1GeoPosition.longitude,
+                point1GeoPosition.latitude,
+                point1GeoPosition.height
+              ),
+              new Cesium.Cartesian3.fromRadians(
+                point2GeoPosition.longitude,
+                point2GeoPosition.latitude,
+                point1GeoPosition.height
+              ),
+            ];
+
+            polyline1 = polylines.add({
+              show: true,
+              positions: pl1Positions,
+              width: 2,
+              material: new Cesium.Material({
+                fabric: {
+                  type: "Color",
+                  uniforms: {
+                    color: LINEPOINTCOLOR,
+                  },
+                },
+              }),
+            });
+            polyline2 = polylines.add({
+              show: true,
+              positions: pl2Positions,
+              width: 3,
+              material: new Cesium.Material({
+                fabric: {
+                  type: "PolylineDash",
+                  uniforms: {
+                    color: LINEPOINTCOLOR,
+                  },
+                },
+              }),
+            });
+            polyline3 = polylines.add({
+              show: true,
+              positions: pl3Positions,
+              width: 2,
+              material: new Cesium.Material({
+                fabric: {
+                  type: "PolylineDash",
+                  uniforms: {
+                    color: LINEPOINTCOLOR,
+                  },
+                },
+              }),
+            });
+            var labelZ;
+            if (point2GeoPosition.height >= point1GeoPosition.height) {
+              labelZ =
+                point1GeoPosition.height +
+                (point2GeoPosition.height - point1GeoPosition.height) / 2.0;
+            } else {
+              labelZ =
+                point2GeoPosition.height +
+                (point1GeoPosition.height - point2GeoPosition.height) / 2.0;
+            }
+
+            addDistanceLabel(point1, point2, labelZ);
+          }
+        }
+      }
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  handler.setInputAction(function (event) {
+    terminateShape();
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+  $("#hrLine").click(function () {
+    ClearMeasurement();
+    $(".measurementButton").removeClass("active").addClass("inactive");
+    $(this).removeClass("inactive").addClass("active");
+    MeasurementMode = "hrLine";
+  });
+  $("#vrLine").click(function () {
+    ClearMeasurement();
+    $(".measurementButton").removeClass("active").addClass("inactive");
+    $(this).removeClass("inactive").addClass("active");
+    MeasurementMode = "vrLine";
+  });
+  $("#polyline").click(function () {
+    ClearMeasurement();
+    $(".measurementButton").removeClass("active").addClass("inactive");
+    $(this).removeClass("inactive").addClass("active");
+    MeasurementMode = "polyline";
+  });
+  $("#area").click(function () {
+    ClearMeasurement();
+    $(".measurementButton").removeClass("active").addClass("inactive");
+    $(this).removeClass("inactive").addClass("active");
+    MeasurementMode = "area";
+  });
+  $("#slope").click(function () {
+    ClearMeasurement();
+    $(".measurementButton").removeClass("active").addClass("inactive");
+    $(this).removeClass("inactive").addClass("active");
+    MeasurementMode = "slope";
+  });
+});
